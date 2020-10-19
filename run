@@ -1,0 +1,18 @@
+#!/bin/bash
+
+function kill_port() {
+    who=$1
+    port=$2
+
+    pid=$(netstat -tnlp 2>/dev/null | grep ":$port" | awk -F'LISTEN *|/' '/^(tcp|udp)/{print $2}')
+    if [ -n "$pid" ]
+    then
+        kill $pid
+        echo $who : Process $pid killed
+    fi
+    unset pid
+}
+
+source activate api-server
+kill_port "API Server" "7002"
+python app.py
