@@ -12,7 +12,7 @@ def isValidBid(bid):
 def getDBURI():
     from config import config, secret
 
-    return "{}+{}://{}:{}@{}:{}/{}".format(config.DB_TYPE, config.DB_DRIVER, config.DB_USER, secret.DB_PASSWORD, config.DB_HOST, config.DB_PORT, config.DB_NAME)
+    return f"{config.DB_TYPE}+{config.DB_DRIVER}://{config.DB_USER}:{secret.DB_PASSWORD}@{config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}"
 
 
 def getKeywordExtractor():

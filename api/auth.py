@@ -56,7 +56,7 @@ def sign_in():
 
         access_token = jwt.encode({
             "uid": row.uid,
-            "exp": datetime.utcnow() + timedelta(weeks=48)  #seconds=config.JWT_EXP_TIME
+            "exp": datetime.utcnow() + timedelta(seconds=config.JWT_EXP_TIME)
         }, secret.JWT_SECRET, algorithm=config.JWT_ALGORITHM).decode("utf-8")
 
         return {

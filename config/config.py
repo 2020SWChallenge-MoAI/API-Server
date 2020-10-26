@@ -26,7 +26,7 @@ JWT_EXP_TIME = 600
 # Directory
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, 'model')
-BOOK_DIR = os.path.join(os.path.dirname(BASE_DIR), 'book/woongjin/raw')
+ASSET_DIR = os.path.join(BASE_DIR, "assets")
 
 # File
 KEYWORD_DATA_FILE_NAME = "keyword-extractor.pkl"

@@ -4,10 +4,12 @@ import json
 from functools import wraps
 
 from flask import Blueprint, request, abort, g
+from flask.helpers import send_from_directory
 from api.auth import signin_required
 
 from database import db
 from database.user_book import User_Book
+from database.book import Book
 from config import config
 from functions import *
 from init_once import keyword_extractor, mainsentence_komoran_tokenizer_summarizer, mainsentence_subword_tokenizer_summarizer
@@ -28,50 +30,69 @@ def bid_validity_chk_required(f):
 
 @book.route("", methods=["GET"])
 @signin_required
-def getBidList():
-    bid_list = sorted([int(x.split(".")[0]) for x in os.listdir(config.BOOK_DIR) if (re.compile("^\d+[.]txt$").match(x) != None)])
+def getAllBookMetaData():
+    qresult = Book.query.all()
+
+    result = []
+    for row in qresult:
+        result.append({
+            "bid": row.bid,
+            "title": row.title,
+            "author": row.author,
+            "publisher": row.publisher,
+            "category": row.category,
+            "page_num": row.page_num
+        })
 
     return {
-        "bids": bid_list
+        "books": result
     }, 200
 
 
-@book.route("/<int:bid>", methods=["GET"])
+@book.route("/<int:bid>/cover", methods=["GET"])
 @signin_required
 @bid_validity_chk_required
-def getBookMeta(bid):
-    with open(os.path.join(config.BOOK_DIR, str(bid) + ".txt"), "r", encoding="utf-8") as f:
-        text_by_lines = f.readlines()
-    
-    title = text_by_lines[0].strip()
+def getBookCover(bid):
+    path = os.path.join(config.ASSET_DIR, str(bid), "cover.png")
+    try:
+        return send_from_directory(directory=os.path.dirname(path), filename=os.path.basename(path))
+    except:
+        abort(404)
 
-    return {
-        "bid": bid,
-        "title": title
-    }, 200
+
+@book.route("/<int:bid>/<int:page>", methods=["GET"])
+@signin_required
+@bid_validity_chk_required
+def getBookPage(bid, page):
+    uid = g.uid
+    
+    path = os.path.join(config.ASSET_DIR, str(bid), f"{bid}-{page}.png")
+    if os.path.exists(path):
+        try:
+            db.session.add(User_Book(uid, bid))
+            db.session.commit()
+        except:
+            abort(500)
+        
+        return send_from_directory(directory=os.path.dirname(path), filename=os.path.basename(path))
+    else:
+        abort(404)
 
 
 @book.route("/<int:bid>/text", methods=["GET"])
 @signin_required
 @bid_validity_chk_required
 def getBookText(bid):
-    uid = g.uid
+    path = os.path.join(config.ASSET_DIR, str(bid), "text.txt")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            text_by_lines = f.readlines()
+        
+        text = "".join(text_by_lines[1:]) # 제목 줄 제거
 
-    with open(os.path.join(config.BOOK_DIR, str(bid) + ".txt"), "r", encoding="utf-8") as f:
-        text_by_lines = f.readlines()
-    
-    text = "".join(text_by_lines[1:])
-
-    try:
-        db.session.add(User_Book(uid, bid))
-        db.session.commit()
-    except:
-        abort(500)
-    
-    return {
-        "bid": bid,
-        "text": text
-    }, 200
+        return {"text": text}, 200
+    else:
+        abort(404)
 
 
 @book.route("/<int:bid>/keyword", methods=["GET"])
@@ -135,10 +156,7 @@ def getBookMainSentence(bid):
     
     appeared_sent_idx = []
     main_sentences = []
-    for item in summarize_result:
-        sent_idx = item[0]
-        sent_rank = item[1]
-
+    for sent_idx, sent_rank, _  in summarize_result:
         if len(appeared_sent_idx) == main_sentence_num:  # 필요한 개수 다 채우면 종료
             break
         
