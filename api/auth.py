@@ -10,26 +10,6 @@ from config import config, secret
 
 auth = Blueprint(name="auth", import_name=__name__)
 
-def signin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        access_token = request.headers.get("x-access-token")
-        
-        if access_token is None:
-            abort(401)
-        else:
-            try:
-                payload = jwt.decode(jwt=access_token, key=secret.JWT_SECRET, algorithms=config.JWT_ALGORITHM)
-                g.uid = payload["uid"]
-            except jwt.ExpiredSignatureError:
-                abort(401)
-            except jwt.InvalidTokenError:
-                abort(401)
-            
-            return f(*args, **kwargs)
-
-    return decorated_function
-
 @auth.route("/signin", methods=["POST"])
 def sign_in():
     params = request.get_json()
@@ -116,3 +96,5 @@ def sign_up():
         return {}, 200
     except:
         abort(400)
+
+        
