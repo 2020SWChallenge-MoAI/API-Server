@@ -72,6 +72,20 @@ def getBookCover(bid):
         abort(404)
 
 
+@book.route("/<int:bid>/read", methods=["POST"])
+@signin_required
+@bid_validity_chk_required
+def registerBookRead(bid):
+    uid = g.uid
+
+    try:
+        db.session.add(User_Book(uid, bid))
+        db.session.commit()
+        return {}, 200
+    except:
+        abort(500)
+
+
 @book.route("/<int:bid>/<int:page>", methods=["GET"])
 @signin_required
 @bid_validity_chk_required
@@ -80,12 +94,6 @@ def getBookPage(bid, page):
     
     path = os.path.join(config.BOOK_DIR, str(bid), f"{bid}-{page}.png")
     if os.path.exists(path):
-        try:
-            db.session.add(User_Book(uid, bid))
-            db.session.commit()
-        except:
-            abort(500)
-        
         return send_from_directory(directory=os.path.dirname(path), filename=os.path.basename(path))
     else:
         abort(404)
@@ -129,7 +137,7 @@ def getBookKeyword(bid):
         except:
             ancestors = []
     
-    keywords = keyword_extractor.recommend(document_id=bid, keyword_history=ancestors, num=keyword_num)
+    keywords = keyword_extractor.recommend(document_id=bid, queries=ancestors, num=keyword_num, use_ner=False)
 
     return {
         "keywords": keywords
@@ -239,6 +247,14 @@ def getBookMainImage(bid):
             abort(404)
     else:
         abort(404)
+    
+    if "thumbnail" in params.keys():
+        try:
+            thumbnail = bool(params["thumbnail"])
+        except:
+            thumbnail = False
+    else:
+        thumbnail = False
 
     if bid not in config.SELECTED_BOOK_BIDS:
         abort(404)
@@ -248,11 +264,13 @@ def getBookMainImage(bid):
     if len(qresult) == 0:
         abort(404)
     
-    path = os.path.join(config.BOOK_DIR, str(bid), "imgs", qresult[0].uri)
-    print(path)
-
     try:
-        return send_from_directory(directory=os.path.dirname(path), filename=os.path.basename(path))
+        if thumbnail:
+            path = os.path.join(config.BOOK_DIR, str(bid), "imgs", f"thumb.{qresult[0].uri}")
+            return send_from_directory(directory=os.path.dirname(path), filename=os.path.basename(path))
+        else:
+            path = os.path.join(config.BOOK_DIR, str(bid), "imgs", f"{qresult[0].uri}")
+            return send_from_directory(directory=os.path.dirname(path), filename=os.path.basename(path))
     except:
         abort(404)
 
@@ -333,6 +351,7 @@ def verifyQnAAnswer(bid):
 @signin_required
 @bid_validity_chk_required
 def submitQuestion(bid):
+    uid = g.uid
     params = request.get_json()
     
     if bid not in config.SELECTED_BOOK_BIDS:
@@ -405,7 +424,7 @@ def getRandomQuestionAnswer(bid):
         "question": row.question,
         "type": row.type,
         "answer": row.answer,
-        "created_at": row.created_at
+        "created_at": row.created_at.isoformat()
     }, 200
     
     

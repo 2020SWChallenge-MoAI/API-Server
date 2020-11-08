@@ -1,9 +1,8 @@
 from datetime import datetime
-from functions import deleteWorkThumbnail, isValidBid, saveWorkThumbnail
-import os
-import base64
+from functions import isValidBid
 from flask import Blueprint, request, abort, g
 from sqlalchemy import desc, sql
+import json
 
 from functions import *
 
@@ -31,21 +30,8 @@ def getUserInfo():
     else:
         user_row = user_qresult[0]
 
-        user_book_qresult = User_Book.query.filter_by(uid=uid).order_by(desc(User_Book.read_at)).all()
-        read_book_bids = []
-        appeared_bids = []
-        for user_book_row in user_book_qresult:
-            if user_book_row.bid not in appeared_bids:
-                read_book_bids.append({
-                    "bid": user_book_row.bid,
-                    "read_at": user_book_row.read_at
-                })
-                appeared_bids.append(user_book_row.bid)
-        
-        work_qresult = Work.query.filter_by(uid=uid).order_by(desc(Work.updated_at)).all()
-        wids = []
-        for work_row in work_qresult:
-            wids.append(work_row.wid)
+        read_book_bids = getUserReadBookBids(uid)
+        wids, monthly_grade = getUserWorkWids(uid)
 
         return {
             "nickname": user_row.nickname,
@@ -53,10 +39,11 @@ def getUserInfo():
             "age": user_row.age,
             "profile_img_url": user_row.profile_img_url,
             "profile_text": user_row.profile_text,
-            "created_at": user_row.created_at,
-            "updated_at": user_row.updated_at,
+            "created_at": user_row.created_at.isoformat(),
+            "updated_at": user_row.updated_at.isoformat(),
             "read_book_bids": read_book_bids,
-            "wids": wids
+            "wids": wids,
+            "monthly_grade": monthly_grade
         }, 200
 
 
@@ -77,25 +64,8 @@ def getUserReadBook():
         if num <= 0:
             num = -1
 
-    qresult = User_Book.query.filter_by(uid=uid).order_by(desc(User_Book.read_at)).all()
-    read_book_bids = []
-    appeared_bids = []
-    for row in qresult:
-        if row.bid not in appeared_bids:
-            read_book_bids.append({
-                "bid": row.bid,
-                "read_at": row.read_at
-            })
-            appeared_bids.append(row.bid)
-        
-        if num != -1 and len(read_book_bids) == num:
-            break
-    
-    if num != -1:
-        read_book_bids = read_book_bids[:num]
-
     return {
-        "read_book_bids": read_book_bids
+        "read_book_bids": getUserReadBookBids(uid, num)
     }, 200
 
 
@@ -104,14 +74,8 @@ def getUserReadBook():
 def getAllUserWork():
     uid = g.uid
     
-    qresult = Work.query.filter_by(uid=uid).order_by(desc(Work.updated_at)).all()
-
-    wids = []
-    for row in qresult:
-        wids.append(row.wid)
-    
     return {
-        "wids": wids
+        "wids": getUserWorkWids(uid)[0]
     }, 200
 
 
@@ -131,17 +95,13 @@ def getUserWork(wid):
     created_at = row.created_at
     updated_at = row.updated_at
     content = row.content
-
-    thumbnail_path = os.path.join(config.WORK_DIR, str(uid), getWorkName(bid, updated_at, type))
-    thumbnail = convertFileToBase64(thumbnail_path)
     
     return {
         "wid": wid,
         "bid": bid,
         "type": type,
-        "created_at": created_at,
-        "updated_at": updated_at,
-        "thumbnail": thumbnail,
+        "created_at": created_at.isoformat(),
+        "updated_at": updated_at.isoformat(),
         "content": content
     }, 200
 
@@ -160,36 +120,36 @@ def saveUserWork():
         except:
             abort(400)
 
-        if "thumbnail" not in params.keys():
-            abort(400)
-        else:
-            thumbnail = params["thumbnail"]
-
         if "content" not in params.keys():
             abort(400)
         else:
             content = params["content"]
 
         qresult = Work.query.filter_by(wid=wid).all()
-
         if len(qresult) == 0:
             abort(400)
-
-        target = qresult[0]
-
+        
         try:
-            saveWorkThumbnail(uid=target.uid, bid=target.bid, type=target.type, updated_at=now, thumbnail=thumbnail)
+            qresult[0].content = content
+            qresult[0].updated_at = now
+
+            if type == 0:
+                max_depth, avg_child_num, morethan2child_node_num, max_depth_diff, template_node_balance, user_created_node_num, ai_support_num, duplicate_node = gradeMindmap(json.loads(content))
+
+                qresult[0].max_depth = max_depth
+                qresult[0].avg_child_num = avg_child_num
+                qresult[0].morethan2child_node_num = morethan2child_node_num
+                qresult[0].max_depth_diff = max_depth_diff
+                qresult[0].template_node_balance = template_node_balance
+                qresult[0].user_created_node_num = user_created_node_num
+                qresult[0].ai_support_num = ai_support_num
+                qresult[0].duplicate_node = duplicate_node
+
+            db.session.commit()
+
+            return {}, 200
         except:
-            deleteWorkThumbnail(uid=target.uid, bid=target.bid, type=target.type, updated_at=now)  # delete currently saved file if exists
             abort(400)
-
-        deleteWorkThumbnail(uid=target.uid, bid=target.bid, type=target.type, updated_at=target.updated_at)  # delete previously saved file if exists
-
-        target.content = content
-        target.updated_at = now
-        db.session.commit()
-
-        return {}, 200
     else: # create
         if "bid" not in params.keys():
             abort(400)
@@ -213,11 +173,6 @@ def saveUserWork():
             if type not in [0, 1, 2, 3]:
                 abort(400)
         
-        if "thumbnail" not in params.keys():
-            abort(400)
-        else:
-            thumbnail = params["thumbnail"]
-        
         if "content" not in params.keys():
             abort(400)
         else:
@@ -225,15 +180,15 @@ def saveUserWork():
 
             if len(content) == 0:
                 abort(400)
-
+        
         try:
-            saveWorkThumbnail(uid=uid, bid=bid, type=type, updated_at=now, thumbnail=thumbnail)
-        except:
-            deleteWorkThumbnail(uid=uid, bid=bid, type=type, updated_at=now)  # delete currently saved file if exists
-            abort(400)
-
-        try:
-            db.session.add(Work(uid=uid, bid=bid, type=type, created_at=now, updated_at=now, content=content))
+            if type == 0:
+                max_depth, avg_child_num, morethan2child_node_num, max_depth_diff, template_node_balance, user_created_node_num, ai_support_num, duplicate_node = gradeMindmap(json.loads(content))
+                work = Work(uid=uid, bid=bid, type=type, created_at=now, updated_at=now, content=content, max_depth=max_depth, avg_child_num=avg_child_num, morethan2child_node_num=morethan2child_node_num, max_depth_diff=max_depth_diff, template_node_balance=template_node_balance, user_created_node_num=user_created_node_num, ai_support_num=ai_support_num, duplicate_node=duplicate_node)
+            else:
+                work = Work(uid=uid, bid=bid, type=type, created_at=now, updated_at=now, content=content)
+            
+            db.session.add(work)
             db.session.commit()
             return {}, 200
         except:

@@ -14,7 +14,7 @@ def echo_func():
     if access_token is not None:
         access_token_result["x-access-token"] = access_token
         try:
-            payload = jwt.decode(jwt=access_token, key=secret.JWT_SECRET, algorithms=config.JWT_ALGORITHM)
+            payload = jwt.decode(jwt=access_token, key=secret.JWT_SECRET, algorithms=config.JWT_ALGORITHM, options={"verify_exp": False})
             access_token_result.update(payload)
             access_token_result["validity"] = True
         except:

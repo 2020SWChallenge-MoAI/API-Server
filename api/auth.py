@@ -1,11 +1,12 @@
 from flask import Blueprint, request, abort, g
 from datetime import datetime, timedelta
-from functools import wraps
 import bcrypt
 import jwt
 
 from database import db
 from database.user import User
+from database.token import Token
+from sqlalchemy import desc
 from config import config, secret
 
 auth = Blueprint(name="auth", import_name=__name__)
@@ -36,12 +37,23 @@ def sign_in():
 
         access_token = jwt.encode({
             "uid": row.uid,
-            "exp": datetime.utcnow() + timedelta(seconds=config.JWT_EXP_TIME)
+            "exp": datetime.utcnow() + timedelta(seconds=config.JWT_ACCESS_TOKEN_EXP_TIME)
         }, secret.JWT_SECRET, algorithm=config.JWT_ALGORITHM).decode("utf-8")
 
-        return {
-            "access-token": access_token
-        }, 200
+        refresh_token = jwt.encode({
+            "exp": datetime.utcnow() + timedelta(seconds=config.JWT_REFRESH_TOKEN_EXP_TIME)
+        }, secret.JWT_SECRET, algorithm=config.JWT_ALGORITHM).decode("utf-8")
+
+        try:
+            db.session.add(Token(refresh_token, access_token))
+            db.session.commit()
+
+            return {
+                "access-token": access_token,
+                "refresh-token": refresh_token
+            }, 200
+        except:
+            abort(400)
 
 
 @auth.route("/id-duplicate-check", methods=["GET"])
@@ -97,4 +109,34 @@ def sign_up():
     except:
         abort(400)
 
-        
+
+@auth.route("/refresh", methods=["GET"])
+def refresh_token():
+    access_token = request.headers.get("x-access-token")
+    refresh_token = request.headers.get("x-refresh-token")
+
+    if access_token == None or refresh_token == None:
+        abort(401)
+
+    try:
+        payload = jwt.decode(jwt=access_token, key=secret.JWT_SECRET, algorithms=config.JWT_ALGORITHM, options={"verify_exp": False})
+        uid = payload["uid"]
+    except jwt.InvalidTokenError:
+        abort(401)
+
+    qresult = Token.query.filter_by(refresh_token=refresh_token, access_token=access_token).order_by(desc(Token.created_at)).all()
+
+    if len(qresult) == 0:
+        abort(401)
+
+    new_access_token = jwt.encode({
+        "uid": uid,
+        "exp": datetime.utcnow() + timedelta(seconds=config.JWT_ACCESS_TOKEN_EXP_TIME)
+    }, secret.JWT_SECRET, algorithm=config.JWT_ALGORITHM).decode("utf-8")
+
+    qresult[0].access_token = new_access_token
+    db.session.commit()
+
+    return {
+        "access-token": new_access_token
+    }, 200
