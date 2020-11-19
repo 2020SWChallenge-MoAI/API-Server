@@ -37,6 +37,9 @@ def getAllBookMetaData():
             "image_num": row.image_num
         })
 
+    target_books = [8, 10, 21, 22, 31, 38, 40, 41, 55, 90]
+    result = [r for r in result if r['bid'] in target_books]
+
     return {
         "books": result
     }, 200
@@ -129,16 +132,24 @@ def getBookKeyword(bid):
         except:
             keyword_num = config.DEFAULT_KEYWORD_NUM
 
+    book_template_tags = []
     if "anc" not in params.keys():
         ancestors = []
     else:
         try:
             ancestors = json.loads(params["anc"])
+            if ancestors[-1] == '등장인물':
+                book_template_tags = ['PS','CV_POS']
+                ancestors = ancestors[:-1]
+            elif ancestors[-1] == '사건':
+                book_template_tags = ['EV']
+                ancestors = ancestors[:-1]
+            ancestors = [ancestors[0]]
         except:
             ancestors = []
-    
-    keywords = keyword_extractor.recommend(document_id=bid, queries=ancestors, num=keyword_num, use_ner=False)
 
+    keywords = keyword_extractor.recommend(document_id=bid, queries=ancestors, num=keyword_num, tags=book_template_tags, use_ner=True)
+    # print(keywords[:10])
     return {
         "keywords": keywords
     }, 200
@@ -196,7 +207,7 @@ def getBookMainSentence(bid):
             appeared_sids.append(sid)
             appeared_sids.append(sid + 1)
     else:
-        with open(os.path.join(config.BOOK_TEXT_DIR, f"{bid}.txt"), "r", encoding="utf-8") as f:
+        with open(os.path.join(config.DEMO_DIR, str(bid), "text.txt"), "r", encoding="utf-8") as f:
             full_sent_texts = f.readlines()
         
         full_sent_texts = [x.strip() for x in full_sent_texts if x]
@@ -330,14 +341,15 @@ def verifyQnAAnswer(bid):
                 abort(404)
 
             try:
-                answer = int(choices[0])  # answer가 숫자가 아니면 error
+                multi_choice_answer = int(choices[0])  # answer가 숫자가 아니면 error
             except:
                 abort(404)
             
             choices = choices[1:]
 
-            if answer not in range(1, len(choices) + 1):  # answer가 choice 중 하나가 아니면 error
+            if multi_choice_answer not in range(1, len(choices) + 1):  # answer가 choice 중 하나가 아니면 error
                 abort(404)
+
     else:
         abort(404)
 
@@ -383,13 +395,13 @@ def submitQuestion(bid):
                 abort(404)
 
             try:
-                answer = int(choices[0])  # answer가 숫자가 아니면 error
+                multi_choice_answer = int(choices[0])  # answer가 숫자가 아니면 error
             except:
                 abort(404)
             
             choices = choices[1:]
 
-            if answer not in range(1, len(choices) + 1):  # answer가 choice 중 하나가 아니면 error
+            if multi_choice_answer not in range(1, len(choices) + 1):  # answer가 choice 중 하나가 아니면 error
                 abort(404)
     else:
         abort(404)

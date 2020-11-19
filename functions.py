@@ -20,28 +20,9 @@ def getKeywordExtractor():
     from keyext import preprocess, KeywordExtractor
     from config import config
     import os
-    import re
-
-    # TODO : pkl 파일은 외부에서 만들어 넣어주는 형식이라 생각하자. => build 함수 지워도 됨 (config.BOOK_TEXT_DIR을 사용함)
-    def buildKeywordExtractionDataFile(extractor):
-        build_data = []
-        for i, bid in enumerate(sorted([int(x.split(".")[0]) for x in os.listdir(config.BOOK_TEXT_DIR) if (re.compile("^\d+[.]txt$").match(x) != None)])):
-            with open(os.path.join(config.MODEL_DIR, str(bid) + ".txt"), "r") as f:
-                text = f.read()
-            
-            build_data.append([bid, preprocess(text)])
-        
-        extractor.build(build_data)
-        extractor.save(os.path.join(config.MODEL_DIR, "keyext", config.KEYWORD_DATA_FILE_NAME))
 
     keyword_extractor = KeywordExtractor()
-
-    # NOTE : 로드 방식 바뀌어서 파일 이름 체크만으로는 빌드 여부 확인 못함. 일단 주석처리해놓음
-    # if config.KEYWORD_DATA_FILE_NAME not in os.listdir(os.path.join(config.MODEL_DIR, "keyext")):
-    #    buildKeywordExtractionDataFile(keyword_extractor)
-    
     keyword_extractor.load(os.path.join(config.MODEL_DIR, "keyext", config.KEYWORD_DATA_FILE_NAME))
-
     return keyword_extractor
 
 def subword_tokenizer(sent, n=3):
@@ -71,10 +52,9 @@ def isValidQuestion(bid, question):
     
     text = "".join(text_by_lines[1:])
 
-    score = electra.get_answer(question=question, context=text)[0]["score"]
-
-    # DEBUG CODE
-    print(f"{score} - {question}")
+    score = electra({
+        'question': question,
+        'context': text})["score"]
 
     if score >= config.QNA_QUESTION_VALID_SCORE_THRESHOLD:
         return True
@@ -84,7 +64,7 @@ def isValidQuestion(bid, question):
 def isValidAnswer(bid, question, type, answer):
     import os
     from config import config
-    from init_once import electra
+    from init_once import electra, komoran
     from model.qna.utils import f1_score
 
     path = os.path.join(config.BOOK_DIR, str(bid), "text.txt")
@@ -93,23 +73,29 @@ def isValidAnswer(bid, question, type, answer):
     
     text = "".join(text_by_lines[1:])
 
-    electra_answer = electra.get_answer(question=question, context=text, topk=1)[0]["answer"]
+    electra_answers = electra({
+        'question': question,
+        'context': text},
+        topk=5)
+    
+    electra_answers = ["".join(komoran.nouns(w['answer'])) for w in electra_answers]
 
     if type == 0:
+        print(answer)
         choices = answer.split("#@@#")
         answer = int(choices[0])
         choices = choices[1:]
 
         scores = []
         for choice in choices:
-            scores.append(f1_score(electra_answer, choice))
+            scores.append(max([f1_score(electra, choice) for electra in electra_answers]))
         
         if answer == [(i + 1) for i, s in enumerate(scores) if s == max(scores)][0]:
             return True
         else:
             return False
     else:  # type == 1
-        score = f1_score(electra_answer, answer)
+        score = max([f1_score(electra, answer) for electra in electra_answers])
 
         if score >= config.QNA_ANSWER_VALID_SCORE_THRESHOLD:
             return True
@@ -152,17 +138,18 @@ def getUserWorkWids(uid):
     monthly_grade = {}
     for row in qresult:
         wids.append(row.wid)
-        
-        month_str = convertDateTimeToMonthStr(row.updated_at)
-        if month_str not in monthly_grade.keys():
-            monthly_grade[month_str] = {}
-            monthly_grade[month_str]["understanding"] = 0
-            monthly_grade[month_str]["sincerity"] = 0
-            monthly_grade[month_str]["creativity"] = 0
 
-        monthly_grade[month_str]["understanding"] += row.max_depth + row.avg_child_num
-        monthly_grade[month_str]["sincerity"] += row.morethan2child_node_num - row.max_depth_diff - row.template_node_balance
-        monthly_grade[month_str]["creativity"] += row.user_created_node_num - row.ai_support_num - row.duplicate_node
+        if row.type == 0:
+            month_str = convertDateTimeToMonthStr(row.updated_at)
+            if month_str not in monthly_grade.keys():
+                monthly_grade[month_str] = {}
+                monthly_grade[month_str]["understanding"] = 0
+                monthly_grade[month_str]["sincerity"] = 0
+                monthly_grade[month_str]["creativity"] = 0
+
+            monthly_grade[month_str]["understanding"] += row.max_depth + row.avg_child_num
+            monthly_grade[month_str]["sincerity"] += row.morethan2child_node_num - row.max_depth_diff - row.template_node_balance
+            monthly_grade[month_str]["creativity"] += row.user_created_node_num - row.ai_support_num - row.duplicate_node
     
     return wids, monthly_grade
 
@@ -176,13 +163,15 @@ def gradeMindmap(mindmap):
                         "id": node["id"],
                         "label": node["label"],
                         "parent": node["parent"],
-                        "child": []
+                        "child": [],
+                        "ai": None if (node["ai"] == "") else node["ai"]
                     }
             else:
                 nodes_dict[node["id"]] = {
                     "id": node["id"],
                     "parent": node["parent"],
-                    "child": []
+                    "child": [],
+                    "ai": None if (node["ai"] == "") else node["ai"]
                 }
 
         root = nodes_dict[0]
@@ -196,7 +185,6 @@ def gradeMindmap(mindmap):
                 appendChildRecursive(item)
         
         appendChildRecursive(root)
-
         return root
     
     def calcMaxDepth(tree):
@@ -214,7 +202,6 @@ def gradeMindmap(mindmap):
                 recursive(child, cur_depth + 1)
         
         recursive(tree, 0)
-
         return max_depth
     
     def calcMinDepth(tree):
@@ -232,7 +219,6 @@ def gradeMindmap(mindmap):
                 recursive(child, cur_depth + 1)
         
         recursive(tree, 0)
-
         return min_depth
 
     def calcAvgChildNum(tree):
@@ -251,7 +237,6 @@ def gradeMindmap(mindmap):
                 recursive(item)
 
         recursive(tree)
-
         return child_num_sum // child_num_count
 
     def countHighDepthNode(tree, depth):
@@ -267,7 +252,6 @@ def gradeMindmap(mindmap):
                 recursive(child, cur_depth + 1)
         
         recursive(tree, 0)
-
         return count
     
     def calcMaxDepthDiff(tree):
@@ -288,7 +272,6 @@ def gradeMindmap(mindmap):
                 recursive(item)
         
         recursive(tree)
-
         return count
 
     def calcTemplateNodeBalance(tree):
@@ -312,7 +295,21 @@ def gradeMindmap(mindmap):
                 recursive(item)
         
         recursive(tree)
+        return count
 
+    def countAISupportedNodes(tree):
+        count = 0
+
+        def recursive(node):
+            nonlocal count
+
+            if node["ai"] is not None:
+                count += 1
+
+            for item in node["child"]:
+                recursive(item)
+        
+        recursive(tree)
         return count
 
     def countDuplicateNodes(tree):
@@ -333,6 +330,7 @@ def gradeMindmap(mindmap):
             for item in node["child"]:
                 recursive(item)
 
+        recursive(tree)
         return count
 
     tree = getTree(mindmap["nodes"])
@@ -343,7 +341,7 @@ def gradeMindmap(mindmap):
     max_depth_diff = calcMaxDepthDiff(tree)
     template_node_balance = calcTemplateNodeBalance(tree)
     user_created_node_num = countUserCreatedNodeNum(tree)
-    ai_support_num = mindmap["aiSupportCount"]
+    ai_support_num = countAISupportedNodes(tree)
     duplicate_node = countDuplicateNodes(tree)
 
     return max_depth, avg_child_num, morethan2child_node_num, max_depth_diff, template_node_balance, user_created_node_num, ai_support_num, duplicate_node

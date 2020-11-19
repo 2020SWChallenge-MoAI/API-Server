@@ -1,5 +1,11 @@
+.vscode
 __pycache__/
-model/
+model/keyext/*.pkl
+model/keyext/*.pkl.back
+model/keyext/ner/*.bin
 config/secret.py
 api_server.sql
+assets
+test.ipynb
 test.py
+nohup.out

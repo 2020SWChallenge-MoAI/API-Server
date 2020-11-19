@@ -24,7 +24,7 @@ class Work(db.Model):
     ai_support_num = db.Column(mysql.INTEGER)
     duplicate_node = db.Column(mysql.INTEGER)
 
-    def __init__(self, uid, bid, type, created_at, updated_at, content, max_depth, avg_child_num, morethan2child_node_num, max_depth_diff, template_node_balance, user_created_node_num, ai_support_num, duplicate_node):
+    def __init__(self, uid, bid, type, created_at, updated_at, content, max_depth=None, avg_child_num=None, morethan2child_node_num=None, max_depth_diff=None, template_node_balance=None, user_created_node_num=None, ai_support_num=None, duplicate_node=None):
         self.uid = uid
         self.bid = bid
         self.type = type

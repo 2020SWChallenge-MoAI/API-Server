@@ -4,7 +4,7 @@ DEBUG = True
 
 # App
 APP_NAME = "Ttokdok API Server"
-APP_IP = "localhost"
+APP_IP = "0.0.0.0"
 APP_PORT = 7002
 
 # Database
@@ -18,7 +18,7 @@ DB_CHARSET = "utf8"
 
 # JWT
 JWT_ALGORITHM = "HS256"
-JWT_ACCESS_TOKEN_EXP_TIME = 600  # 10 min
+JWT_ACCESS_TOKEN_EXP_TIME = 86400 # 24h  #600  # 10min
 JWT_REFRESH_TOKEN_EXP_TIME = 1209600  # 2 week
 
 # Directory
@@ -26,7 +26,8 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "model")
 ASSET_DIR = os.path.join(BASE_DIR, "assets")
 BOOK_DIR = os.path.join(ASSET_DIR, "books")
-BOOK_TEXT_DIR = os.path.join(os.path.dirname(BASE_DIR), 'book/woongjin/raw') # TODO: BOOK_DIR 제거하고 DB에 넣기
+DEMO_DIR = os.path.join(ASSET_DIR, "demo")
+
 
 # File
 KEYWORD_DATA_FILE_NAME = "keyword-extractor-current"

@@ -13,6 +13,9 @@ function kill_port() {
     unset pid
 }
 
+#rm nohup.out
+
 source activate api-server
 kill_port "API Server" "7002"
+#nohup python app.py &
 python app.py

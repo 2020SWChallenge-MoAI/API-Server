@@ -9,7 +9,7 @@ from database import db
 from config import config
 from functions import *
 
-from api import book, auth, user, echo
+from api import book, auth, user, echo, demo
 
 app = Flask(config.APP_NAME)
 CORS(app)
@@ -33,5 +33,6 @@ app.register_blueprint(book.book, url_prefix="/api/book")
 app.register_blueprint(auth.auth, url_prefix="/api/auth")
 app.register_blueprint(user.user, url_prefix="/api/user")
 app.register_blueprint(echo.echo, url_prefix="/api/echo")
+app.register_blueprint(demo.demo, url_prefix="/api/demo")
 
 app.run(host=config.APP_IP, port=config.APP_PORT, debug=config.DEBUG)
