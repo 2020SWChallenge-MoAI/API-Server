@@ -18,7 +18,7 @@ gensim==3.8.3
 idna==2.10
 inflect==4.1.0
 itsdangerous==1.1.0
-Jinja2==2.11.2
+Jinja2==2.11.3
 joblib==0.16.0
 JPype1==1.0.2
 keyext @ git+https://github.com/2020SWChallenge-MoAI/keyword-extraction.git@1fb11500bdddb8fef8a6895561f53b477dac3567
